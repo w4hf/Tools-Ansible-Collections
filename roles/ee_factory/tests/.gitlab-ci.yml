@@ -1,0 +1,31 @@
+variables:
+  GIT_STRATEGY: clone
+  ANSIBLE_FORCE_COLOR: 'true'
+
+stages:
+  - Build on DEV
+  - Build on PRE-PRODUCTION
+  - Build on PRODUCTION
+
+.build:
+  script:
+    - 'ansible-playbook build.yml -v'
+  rules:
+    - changes:
+        - 'images.yml'
+      if: $CI_COMMIT_BRANCH == 'main'
+
+Build on DEV:
+  environment: dev
+  stage: Build on DEV
+  extends: .build
+
+Build on PRE-PRODUCTION:
+  environment: preprod
+  stage: Build on PRE-PRODUCTION
+  extends: .build
+
+Build on PRODUCTION:
+  environment: prod
+  stage: Build on PRODUCTION
+  extends: .build

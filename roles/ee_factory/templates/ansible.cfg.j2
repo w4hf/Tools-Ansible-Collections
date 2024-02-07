@@ -1,0 +1,19 @@
+
+[galaxy]
+server_list = rh-certified, validated, community, published 
+
+[galaxy_server.rh-certified]
+url=https://{{ ee_ah_hostname }}/api/galaxy/content/rh-certified/
+token={{ ee_ah_token }}
+
+[galaxy_server.validated]
+url=https://{{ ee_ah_hostname }}/api/galaxy/content/validated/
+token={{ ee_ah_token }}
+
+[galaxy_server.community]
+url=https://{{ ee_ah_hostname }}/api/galaxy/content/community/
+token={{ ee_ah_token }}
+
+[galaxy_server.published]
+url=https://{{ ee_ah_hostname }}/api/galaxy/
+token={{ ee_ah_token }}

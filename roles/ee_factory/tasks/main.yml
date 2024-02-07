@@ -1,0 +1,146 @@
+---
+# tasks file for w4hf.ee_factory
+- name: Requirements check - Check if ansible-builder is installed
+  ansible.builtin.command: ansible-builder --version
+  register: __builder
+  ignore_errors: true
+  changed_when: false
+
+- name: Requirements check - Stop if ansible-builder is not found
+  ansible.builtin.fail:
+    msg: "ansible-builder command could not be found. Please install it before using this role."
+  when: __builder.failed
+
+- name: Get ansible-builder major version
+  ansible.builtin.set_fact:
+    __builder_major_version: "{{ __builder.stdout[0] }}"
+
+- name: Stop if builder version < 3
+  ansible.builtin.fail:
+    msg: "ansible-builder major version ({{ __builder_major_version }}) is inferior than required version (3)"
+  when: __builder_major_version | int < 3
+
+- name: Requirements check - Check if containers.podman collection is present
+  ansible.builtin.command: ansible-galaxy collection list containers.podman
+  register: __collections
+  ignore_errors: true
+  changed_when: false
+
+- name: Requirements check - Stop if containers.podman collection is not found
+  ansible.builtin.fail:
+    msg: "The collection containers.podman is required. Please install it before using this role."
+  when: '"unable to find" in __collections.stderr'
+
+- name: Requirements check - Determine active environment
+  ansible.builtin.set_fact:
+    active_environment: "{{ lookup('env', 'CI_ENVIRONMENT_NAME') | default(target_environment, true) | mandatory(msg='EE target environment is required.') }}"
+
+- name: Create the images folder
+  ansible.builtin.file:
+    path: images/
+    mode: '0755'
+    state: directory
+
+- name: Create the environment folder
+  ansible.builtin.file:
+    path: "images/{{ active_environment }}"
+    mode: '0755'
+    state: directory
+
+- name: Create a folder for each EE
+  ansible.builtin.file:
+    path: images/{{ active_environment }}/{{ item.name }}
+    mode: '0755'
+    state: directory
+  loop: "{{ EEs }}"
+
+- name: Create histroy directory for each EE
+  ansible.builtin.file:
+    path: images/{{ active_environment }}/{{ item.name }}/history
+    mode: '0755'
+    state: directory
+  loop: "{{ EEs }}"
+
+- name: Create configs directory for each EE
+  ansible.builtin.file:
+    path: images/{{ active_environment }}/{{ item.name }}/configs
+    mode: '0755'
+    state: directory
+  loop: "{{ EEs }}"
+
+- name: Find histroy files for images
+  ansible.builtin.command: ls -1 images/{{ active_environment }}/{{ ee.name }}/history/
+  register: histories
+  changed_when: false
+  loop: "{{ EEs }}"
+  loop_control:
+    loop_var: ee
+
+- name: Init needed variables
+  ansible.builtin.set_fact:
+    __skip_image: {}
+    __something_changed: false
+    __actions_performed: []
+
+- name: Init skip_image dict with false
+  ansible.builtin.set_fact:
+    __skip_image: "{{ __skip_image | combine({item.ee.name: False}) }}"
+  loop: "{{ histories.results }}"
+
+- name: Skip image if the new version is already in history file
+  ansible.builtin.set_fact:
+    __skip_image: "{{ __skip_image | combine({item.ee.name: true}) }}"
+  loop: "{{ histories.results }}"
+  when: item.ee.version | string in item.stdout_lines
+
+- name: Update __actions_performed
+  ansible.builtin.set_fact:
+    __actions_performed: "{{ __actions_performed + [ item.key + ' : Image skipped (not built or pushed to AH) because the new requsted version is already in the history folder of the image.'] }}"
+  with_dict: "{{ __skip_image }}"
+  when: item.value | bool
+
+- name: Init Git operations
+  when: push_to_git_remote_repo
+  block:
+    - name: Git config email
+      ansible.builtin.command: "git config user.email {{ git_email }}"
+      changed_when: true
+
+    - name: Git config username
+      ansible.builtin.command: "git config user.name {{ git_username }}"
+      changed_when: true
+
+    - name: Git remote add
+      ansible.builtin.command: "git remote add {{ git_remote_name }} {{ git_access_url }}"
+      changed_when: true
+
+- name: Build each image
+  ansible.builtin.include_tasks: build_image_using_{{ ee.build_method | default('ansible-builder', true) }}.yml
+  loop: "{{ EEs }}"
+  loop_control:
+    loop_var: ee
+  when: not __skip_image[ee.name]
+
+- name: Git push
+  ansible.builtin.command: "git push {{ git_remote_name }} HEAD:main -o ci.skip"
+  when: push_to_git_remote_repo and __something_changed
+  changed_when: true
+
+- name: Git remote remove
+  ansible.builtin.command: "git remote remove {{ git_remote_name }}"
+  changed_when: true
+  when: push_to_git_remote_repo
+
+- name: Update __actions_performed
+  ansible.builtin.set_fact:
+    __actions_performed: "{{ __actions_performed + ['All changes were pushed to the remote repo git.'] }}"
+  when: push_to_git_remote_repo and __something_changed
+
+- name: Update __actions_performed
+  ansible.builtin.set_fact:
+    __actions_performed: "{{ __actions_performed + ['Nothing changed. No action was perfomed.'] }}"
+  when: not __something_changed
+
+- name: Print performed actions if no error occured
+  ansible.builtin.debug:
+    var: __actions_performed

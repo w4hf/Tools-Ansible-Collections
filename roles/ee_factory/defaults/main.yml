@@ -1,0 +1,27 @@
+---
+# defaults file for w4hf.ee_factory
+
+# --------- AH Default Settings
+ah_validate_certs: true
+
+# --------- Build Default Settings
+http_proxy:
+https_proxy:
+no_proxy:
+base_image_name: ee-minimal-rhel8
+base_image_tag: latest
+base_image_full_name: "{{ lookup('env', 'AH_HOSTNAME') | default(ah_hostname, true) }}/{{ base_image_name }}:{{ base_image_tag }}"
+cleanup_after_build: true
+current_version_file_name: current_version
+execution_environment_template: execution-environment.yml.j2
+package_manager_path: /usr/bin/microdnf
+ansible_cfg_template: ansible.cfg.j2
+
+# --------- Git Default Settings
+push_to_git_remote_repo: false
+git_access_token: "{{ lookup('env', 'GIT_ACCESS_TOKEN') }}"
+git_access_url: "{{ 'https://oauth2:' + git_access_token + '@' + git_repo }}" # DO NOT EDIT
+git_remote_name: "{{ 'gitlab_origin_' + active_environment + '_' + lookup('env', 'CI_COMMIT_SHORT_SHA') }}"
+
+# --------- Secure logging
+secure_logging: true

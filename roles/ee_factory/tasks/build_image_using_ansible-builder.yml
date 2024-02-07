@@ -1,0 +1,236 @@
+- name: Compile image variables - {{ ee.name }}
+  ansible.builtin.set_fact:
+    ee_name: "{{ ee.name | mandatory(msg='EE name is required.') }}"
+    ee_version: "{{ ee.version | string | mandatory(msg='EE desired new version is required.') }}"
+    ee_full_name: "{{ ee.name + ':' + ee.version | string }}"
+    ee_deploy_to: "{{ ee.deploy_to | default(deploy_to, true) | mandatory(msg='EE deploy_to environment list is required.') }}"
+    ee_path: "{{ 'images/' + active_environment + '/' + ee.name }}"
+    ee_ah_hostname: "{{ lookup('env', 'EE_' + ee.name | upper + '_AH_HOSTNAME') | default(lookup('env', 'AH_HOSTNAME'), true) | default(ee.ah_hostname, true) | default(ah_hostname, true) | mandatory(msg='Automation Hub hostname not found.') }}"
+    ee_ah_user: "{{ lookup('env', 'EE_' + ee.name | upper + '_AH_USER') | default(lookup('env', 'AH_USER'), true) | default(ee.ah_user, true) | default(ah_user, true) | mandatory(msg='Automation Hub user not found.') }}"
+    ee_ah_validate_certs: "{{ lookup('env', 'EE_' + ee.name | upper + '_VALIDATE_CERTS') | default(lookup('env', 'AH_VALIDATE_CERTS'), true) | default(ee.ah_validate_certs, true) | default(ah_validate_certs, true) }}"
+    ee_package_manager_path: "{{ ee.package_manager_path | default(package_manager_path) }}"
+    ee_base_image_full_name: "{{ ee.base_image_full_name | default(base_image_full_name) | mandatory(msg='EE base image not found.') }}"
+    ee_collections: "{{ ee.collections | default(omit) }}"
+    ee_python_packages: "{{ ee.python_packages | default(omit) }}"
+    ee_system_packages: "{{ ee.system_packages | default(omit) }}"
+    ee_execution_environment_template: "{{ ee.execution_environment_template | default(execution_environment_template, true) }}"
+    ee_current_version_file_name: "{{ ee.current_version_file_name | default(current_version_file_name, true) }}"
+    ee_custom_pip_conf_file: "{{ ee.custom_pip_conf_file | default(custom_pip_conf_file, true) | default(omit, true) }}"
+    ee_custom_repo_file: "{{ ee.custom_repo_file | default(custom_repo_file, true) | default(omit, true) }}"
+    ee_ansible_cfg_template: "{{ ee.custom_ansible_cfg_template | default(ansible_cfg_template, true) | default(omit, true) }}"
+
+- name: Compile Secure variables - {{ ee.name }}
+  ansible.builtin.set_fact:
+    ee_ah_password: "{{ lookup('env', 'EE_' + ee.name | upper + '_AH_PASSWORD') | default(lookup('env', 'AH_PASSWORD'), true) | default(ee.ah_password, true) | default(ah_password, true) | mandatory(msg='Automation Hub password not found.') }}"
+  no_log: "{{ secure_logging }}"
+
+- name: Init operation decisions variables
+  ansible.builtin.set_fact:
+    __skip_env: false
+    __build_and_push: false
+    __push_only: false
+    __do_nothing: false
+
+- name: Decide to skip environment because it is not part of deploy_to list - {{ ee_full_name }}
+  ansible.builtin.set_fact:
+    __skip_env: true
+  when: active_environment not in ee_deploy_to
+
+- name: Set __image_actions depending on perfomed actions - {{ ee_name }}
+  ansible.builtin.set_fact:
+    __image_actions: "{{ ee_name + ' : Deployment to ' + active_environment + ' is not requested.' }}"
+  when: __skip_env
+
+- name: Deploy to {{ active_environment }}
+  when: not __skip_env
+  block:
+    - name: Get current version if it exists - {{ ee_full_name }}
+      ansible.builtin.set_fact:
+        ee_current_version: "{{ lookup('file', ee_path + '/' + ee_current_version_file_name) }}"
+      ignore_errors: true
+
+    - name: Get local images list with same name and version as image to build - {{ ee_full_name }}
+      containers.podman.podman_image_info:
+        name: "{{ ee_full_name }}"
+      register: image_list
+
+    - name: Decide to build the new image if it doesnt already exists or if the new version is different from the current
+      ansible.builtin.set_fact:
+        __build_and_push: true
+        __something_changed: true
+      when: image_list.images | length == 0 and ( ( ee_current_version is defined and ee_current_version != ee_version ) or ( ee_current_version is not defined ) )
+
+    - name: Decide to only push the new image if it already exists
+      ansible.builtin.set_fact:
+        __push_only: true
+        __something_changed: true
+      when: image_list.images | length > 0 and ( ( ee_current_version is defined and ee_current_version != ee_version ) or ( ee_current_version is not defined ) )
+
+    - name: Decide to do nothing if the current version is the same as the new version
+      ansible.builtin.set_fact:
+        __do_nothing: true
+      when: ee_current_version is defined and ee_current_version == ee_version
+
+    - name: Set __image_actions depending on perfomed actions - {{ ee_name }}
+      ansible.builtin.set_fact:
+        __image_actions: "{{ ee_name + ' : Image new version ' + ee_version + ' is built and pushed to ' + active_environment + ' Automation Hub.' }}"
+      when: __build_and_push
+
+    - name: Set __image_actions depending on perfomed actions - {{ ee_name }}
+      ansible.builtin.set_fact:
+        __image_actions: "{{ ee_name + ' : Image new version ' + ee_version + ' was not re-built as it already exists. Existing image was pushed to ' + active_environment + ' Automation Hub.' }}"
+      when: __push_only
+
+    - name: Set __image_actions depending on perfomed actions - {{ ee_name }}
+      ansible.builtin.set_fact:
+        __image_actions: "{{ ee_name + ' : Nothing was done because the current version is the same as the requested new version.' }}"
+      when: __do_nothing
+
+    - name: Build and push - {{ ee_full_name }}
+      when: __build_and_push and not __do_nothing
+      block:
+        - name: Generate execution-environment.yml for {{ ee_full_name }}
+          ansible.builtin.template:
+            src: "{{ ee_execution_environment_template }}"
+            dest: "{{ ee_path }}/execution-environment.yml"
+            mode: '640'
+
+        - name: Request AH token
+          ansible.builtin.uri:
+            url: "https://{{ ee_ah_hostname }}/api/galaxy/v3/auth/token/"
+            method: POST
+            url_username: "{{ ee_ah_user }}"
+            url_password: "{{ ee_ah_password }}"
+            validate_certs: false
+            return_content: true
+            force_basic_auth: true
+            status_code: 200
+          register: __token
+          no_log: "{{ secure_logging }}"
+
+        - name: Extract AH Token
+          ansible.builtin.set_fact:
+            ee_ah_token: "{{ __token.json.token }}"
+          no_log: "{{ secure_logging }}"
+
+        - name: Generate ansible.cfg for {{ ee_full_name }}
+          ansible.builtin.template:
+            src: ansible.cfg.j2
+            dest: "{{ ee_path }}/configs/ansible.cfg"
+            mode: '640'
+
+        - name: Copy custom pip conf file if needed
+          ansible.builtin.copy:
+            src: "{{ ee_custom_pip_conf_file }}"
+            dest: "{{ ee_path }}/configs/"
+            mode: '640'
+          when: ee_custom_pip_conf_file is defined
+
+        - name: Copy custom repo file if needed
+          ansible.builtin.copy:
+            src: "{{ ee_custom_repo_file }}"
+            dest: "{{ ee_path }}/configs/"
+            mode: '640'
+          when: ee_custom_repo_file is defined
+
+        - name: Get image ansible-builder parameters for {{ ee_full_name }}
+          ansible.builtin.include_vars:
+            file: "{{ ee_path }}/execution-environment.yml"
+
+        - name: Make sure the base image is present locally - {{ images.base_image.name }}
+          containers.podman.podman_image:
+            name: "{{ images.base_image.name }}"
+            state: present
+            username: "{{ ee_ah_user }}"
+            password: "{{ ee_ah_password }}"
+            validate_certs: "{{ ee_ah_validate_certs }}"
+
+        - name: Cleanup previous context for {{ ee_full_name }}
+          ansible.builtin.file:
+            path: "{{ ee_path }}/context"
+            state: absent
+
+        - name: Create new context for {{ ee_full_name }}
+          ansible.builtin.command:
+            cmd: ansible-builder create
+            chdir: "{{ ee_path }}/"
+          changed_when: true
+
+        - name: Build and publish the new image {{ ee_full_name }}
+          containers.podman.podman_image:
+            name: "{{ ee_ah_hostname + '/' + ee_full_name }}"
+            state: build
+            path: "{{ ee_path }}/context/"
+            force: false
+            push: true
+            build:
+              force_rm: true
+              extra_args: "--squash"
+            username: "{{ ee_ah_user }}"
+            password: "{{ ee_ah_password }}"
+            validate_certs: "{{ ee_ah_validate_certs }}"
+          environment:
+            http_proxy: "{{ http_proxy | default(omit) }}"
+            https_proxy: "{{ https_proxy | default(omit) }}"
+            no_proxy: "{{ no_proxy | default(omit) }}"
+
+        - name: Copy new execution-environment.yml to history - {{ ee_full_name }}
+          ansible.builtin.copy:
+            dest: "{{ ee_path }}/history/{{ ee_version }}"
+            src: "{{ ee_path }}/execution-environment.yml"
+            mode: '640'
+
+        - name: Delete AH token
+          ansible.builtin.uri:
+            url: "https://{{ ee_ah_hostname }}/api/galaxy/v3/auth/token/"
+            method: DELETE
+            url_username: "{{ ee_ah_user }}"
+            url_password: "{{ ee_ah_password }}"
+            validate_certs: false
+            return_content: true
+            force_basic_auth: true
+            status_code: 204
+          register: delta
+          no_log: "{{ secure_logging }}"
+
+    - name: Only publish the new image it it already exists locally - {{ ee_full_name }}
+      when: __push_only and not __do_nothing
+      containers.podman.podman_image:
+        name: "{{ ee_ah_hostname + '/' + ee_full_name }}"
+        push: true
+        username: "{{ ee_ah_user }}"
+        password: "{{ ee_ah_password }}"
+        validate_certs: "{{ ee_ah_validate_certs }}"
+
+    - name: Update current version file if necessary - {{ ee_full_name }}
+      ansible.builtin.copy:
+        dest: "{{ ee_path + '/' + ee_current_version_file_name }}"
+        content: "{{ ee_version }}"
+        mode: '640'
+      when: not __do_nothing and ( __push_only or __build_and_push )
+
+    - name: Cleanup after successful build
+      when: cleanup_after_build and not __do_nothing and __build_and_push
+      block:
+        - name: Cleanup previous context for {{ ee_full_name }}
+          ansible.builtin.file:
+            path: "{{ ee_path }}/context"
+            state: absent
+
+        - name: Cleanup previous execution-environment.yml for {{ ee_full_name }}
+          ansible.builtin.file:
+            path: "{{ ee_path }}/execution-environment.yml"
+            state: absent
+
+    - name: Push to Git remote repo
+      when: push_to_git_remote_repo and not __do_nothing
+      block:
+      - name: Git add - {{ ee_name }}
+        ansible.builtin.command: git add {{ ee_path }}/
+
+      - name: Git commit - {{ ee_name }}
+        ansible.builtin.command: git commit -m "Created version '{{ ee_version }}' of image '{{ ee_name }}' on {{ active_environment }}"
+
+- name: Update __actions_performed with image action - {{ ee_name }}
+  ansible.builtin.set_fact:
+    __actions_performed: "{{ __actions_performed + [__image_actions] }}"

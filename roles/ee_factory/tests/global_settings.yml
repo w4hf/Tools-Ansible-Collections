@@ -1,0 +1,30 @@
+# --------- Automation Hub Settings
+# ah_hostname:             # or via environment variable AH_HOSTNAME
+# ah_user:                 # or via environment variable AH_USER
+# ah_password:             # or via environment variable AH_PASSWORD
+# ah_token:                # or via environment variable AH_TOKEN
+# ah_validate_certs: false # or via environment variable AH_VALIDATE_CERTS
+
+# --------- Build Settings
+# target_environment: prod
+deploy_to:
+  - dev
+http_proxy:
+https_proxy:
+no_proxy:
+base_image_name: ee-minimal-rhel8
+base_image_tag: latest
+base_image_full_name: "{{ lookup('env', 'AH_HOSTNAME') | default(ah_hostname, true) }}/{{ base_image_name }}:{{ base_image_tag }}" # DO NOT EDIT
+cleanup_after_build: true
+current_version_file_name: current_version
+execution_environment_template: execution-environment.yml.j2
+package_manager_path: /usr/bin/microdnf
+ansible_cfg_template: ansible.cfg.j2
+# custom_pip_conf_file:
+# custom_repo_file:
+
+# --------- Git Settings
+push_to_git_remote_repo: false
+git_email: change@me.com
+git_username: change-me
+git_repo: github.com/change/me

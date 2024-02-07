@@ -1,0 +1,82 @@
+---
+
+# Build config file for {{ ee_full_name }}
+
+version: 3
+
+{% if not ee_ah_validate_certs | bool %}
+build_arg_defaults:
+  ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: '-c'
+{% endif %}
+
+options:
+  package_manager_path: {{ ee_package_manager_path }}
+{% if ( ee_collections is defined ) or ( ee_python_packages is defined ) or ( ee_system_packages is defined ) %}
+
+dependencies:
+{% if ee_collections is defined %}
+  galaxy:
+    collections:
+{% for collection in ee_collections %}
+      {{ '- name: ' + collection.name if collection.name is defined else collection }}
+      {{ '  version: ' + collection.version if collection.version is defined}}
+{% endfor %}
+{% endif %}
+{% if ee_python_packages is defined %}
+  python:
+{% for python_package in ee_python_packages %}
+    - {{ python_package }}
+{% endfor %}
+{% endif %}
+{% if ee_system_packages is defined %}
+  system:
+{% for ee_system_package in ee_system_packages %}
+    - {{ ee_system_package }}
+{% endfor %}
+{% endif %}
+{% endif %}
+
+images:
+  base_image:
+    name: {{ ee_base_image_full_name }}
+
+additional_build_files:
+{% if ee_collections is defined %}
+    - src: configs/ansible.cfg
+      dest: configs
+{% endif %}
+{% if ee_custom_pip_conf_file is defined %}
+    - src: configs/{{ ee_custom_pip_conf_file | basename }}
+      dest: configs
+{% endif %}
+{% if ee_custom_repo_file is defined %}
+    - src: configs/{{ ee_custom_repo_file | basename }}
+      dest: configs
+{% endif %}
+
+{% if ( ee_collections is defined ) or ( ee_custom_pip_conf_file is defined ) or ( ee_custom_repo_file is defined ) %}
+additional_build_steps:
+{% if ( ee_custom_pip_conf_file is defined ) or ( ee_custom_repo_file is defined )%}
+  prepend_base:
+{% if ee_custom_pip_conf_file is defined %}
+    - ADD _build/configs/{{ ee_custom_pip_conf_file | basename }} /etc/pip.conf
+{% endif %}
+{% if ee_custom_repo_file is defined %}
+    - ADD _build/configs/{{ ee_custom_repo_file | basename }} /etc/yum.repos.d/{{ ee_custom_repo_file | basename }}
+{% endif %}
+{% endif %}
+{% if ee_collections is defined %}
+  prepend_galaxy:
+    - ADD _build/configs/ansible.cfg /etc/ansible/ansible.cfg
+{% endif %}
+{% if ( ee_custom_pip_conf_file is defined ) or ( ee_custom_repo_file is defined ) %}
+  prepend_final:
+{% if ee_custom_pip_conf_file is defined %}
+    - ADD _build/configs/{{ ee_custom_pip_conf_file | basename }} /etc/pip.conf
+{% endif %}
+{% if ee_custom_repo_file is defined %}
+    - ADD _build/configs/{{ ee_custom_repo_file | basename }} /etc/yum.repos.d/{{ ee_custom_repo_file | basename }}
+{% endif %}
+{% endif %}
+  # append_final:
+{% endif %}

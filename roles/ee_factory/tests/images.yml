@@ -1,0 +1,43 @@
+# --------- Images to build
+EEs:
+  - name: demo-ee
+    version: 1
+
+    # choose between 'ansible-builder' or 'Containerfile'
+    build_method: ansible-builder
+
+    ## IMAGE SPECIFIC settings
+    # custom_pip_conf_file: customs/pip.conf
+    # custom_repo_file: customs/custom.repo
+    # custom_ansible_cfg_template:
+
+    ## IMAGE settings that OVERWRITE global setting
+    deploy_to:
+      - dev
+      # - preprod
+      # - prod
+
+    # ah_hostname:        # or via image specific environment variable AH_DEMO-EE_HOSTNAME
+    # ah_user:            # or via image specific environment variable AH_DEMO-EE_USER
+    # ah_password:        # or via image specific environment variable AH_DEMO-EE_PASSWORD
+    # ah_validate_certs:  # or via image specific environment variable AH_DEMO-EE_VALIDATE_CERTS
+    # execution_environment_template: customs/demo-ee-execution-environment.yml.j2
+    # package_manager_path: /usr/bin/microdnf
+    # base_image_full_name: quay.io/my-ee:latest
+
+    # Image Content
+    collections:
+      - name: ansible.utils
+        version: 2.9.0
+      - name: ansible.windows
+        version: 1.14.0
+      - name: ansible.posix
+        version: 1.5.4
+
+    python_packages:
+      - six
+      - psutil
+      - jmespath
+
+    system_packages:
+      - iputils [platform:rpm]

@@ -1,0 +1,13 @@
+---
+- name: Build and publish EEs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - global_settings.yml
+    - images.yml
+
+  roles:
+    - w4hf.tools.ee_factory
+...
