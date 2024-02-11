@@ -51,7 +51,7 @@
 
     - name: Get local images list with same name and version as image to build - {{ ee_full_name }}
       containers.podman.podman_image_info:
-        name: "{{ ee_full_name }}"
+        name: "{{ ee_ah_hostname + '/' + ee_full_name }}"
       register: image_list
 
     - name: Decide to build the new image if it doesnt already exists or if the new version is different from the current
@@ -193,7 +193,7 @@
           register: delta
           no_log: "{{ secure_logging }}"
 
-    - name: Only publish the new image it it already exists locally - {{ ee_full_name }}
+    - name: Only publish the new image if it already exists locally - {{ ee_full_name }}
       when: __push_only and not __do_nothing
       containers.podman.podman_image:
         name: "{{ ee_ah_hostname + '/' + ee_full_name }}"

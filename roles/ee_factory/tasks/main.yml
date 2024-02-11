@@ -1,5 +1,5 @@
 ---
-# tasks file for w4hf.ee_factory
+# tasks file for ee_factory
 - name: Requirements check - Check if ansible-builder is installed
   ansible.builtin.command: ansible-builder --version
   register: __builder
@@ -114,6 +114,10 @@
       ansible.builtin.command: "git remote add {{ git_remote_name }} {{ git_access_url }}"
       changed_when: true
 
+    - name: Git pull
+      ansible.builtin.command: "git pull {{ git_remote_name }} HEAD:main"
+      changed_when: true
+
 - name: Build each image
   ansible.builtin.include_tasks: build_image_using_{{ ee.build_method | default('ansible-builder', true) }}.yml
   loop: "{{ EEs }}"
@@ -133,12 +137,12 @@
 
 - name: Update __actions_performed
   ansible.builtin.set_fact:
-    __actions_performed: "{{ __actions_performed + ['All changes were pushed to the remote repo git.'] }}"
+    __actions_performed: "{{ __actions_performed + [ 'All changes were pushed to the remote repo git.' ] }}"
   when: push_to_git_remote_repo and __something_changed
 
 - name: Update __actions_performed
   ansible.builtin.set_fact:
-    __actions_performed: "{{ __actions_performed + ['Nothing changed. No action was perfomed.'] }}"
+    __actions_performed: "{{ __actions_performed + [ 'Nothing changed. No action was perfomed.' ] }}"
   when: not __something_changed
 
 - name: Print performed actions if no error occured
