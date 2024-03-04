@@ -1,6 +1,16 @@
 FROM {{ ee_base_image_full_name }}
 
+{% if ee_collections is defined %}
 ADD configs/ansible.cfg /etc/ansible/ansible.cfg
+{% endif %}
+
+{% if ee_custom_pip_conf_file is defined %}
+ADD configs/{{ ee_custom_pip_conf_file | basename }} /etc/pip.conf
+{% endif %}
+
+{% if ee_custom_repo_file is defined %}
+ADD configs/{{ ee_custom_repo_file | basename }} /etc/yum.repos.d/{{ ee_custom_repo_file | basename }}
+{% endif %}
 
 {% if ee_system_packages is defined %}
 RUN {{ package_manager_path }} install {% for system_package in ee_system_packages %}{{ system_package }} {% endfor %}
