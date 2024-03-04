@@ -1,43 +1,70 @@
 # --------- Images to build
 EEs:
-  - name: demo-ee
+
+  - name: builder-ee
     version: 1
-
-    # choose between 'ansible-builder' or 'Containerfile'
     build_method: ansible-builder
-
-    ## IMAGE SPECIFIC settings
-    # custom_pip_conf_file: customs/pip.conf
-    # custom_repo_file: customs/custom.repo
-    # custom_ansible_cfg_template:
-
-    ## IMAGE settings that OVERWRITE global setting
     deploy_to:
       - dev
-      # - preprod
-      # - prod
-
-    # ah_hostname:        # or via image specific environment variable AH_DEMO-EE_HOSTNAME
-    # ah_user:            # or via image specific environment variable AH_DEMO-EE_USER
-    # ah_password:        # or via image specific environment variable AH_DEMO-EE_PASSWORD
-    # ah_validate_certs:  # or via image specific environment variable AH_DEMO-EE_VALIDATE_CERTS
-    # execution_environment_template: customs/demo-ee-execution-environment.yml.j2
-    # package_manager_path: /usr/bin/microdnf
-    # base_image_full_name: quay.io/my-ee:latest
-
-    # Image Content
+      - preprod
+      - prod
     collections:
       - name: ansible.utils
         version: 2.9.0
-      - name: ansible.windows
-        version: 1.14.0
-      - name: ansible.posix
-        version: 1.5.4
-
     python_packages:
-      - six
       - psutil
       - jmespath
 
+  - name: container-ee
+    version: 1
+    deploy_to:
+      - dev
+    build_method: Containerfile
+    collections:
+      - name: ansible.utils
+        version: 2.9.0
+      - name: ansible.posix
+        version: 1.5.4
+    python_packages:
+      - six
+      - psutil
     system_packages:
-      - iputils [platform:rpm]
+      - iputils
+
+  # - name: demo-ee
+  #   version: 1
+  #   deploy_to:
+  #     - dev
+  #     - preprod
+  #     - prod
+
+  #   # Choose between 'ansible-builder' or 'Containerfile'
+  #   build_method: ansible-builder
+
+  #   # Image Content
+  #   collections:
+  #     - name: ansible.utils
+  #       version: 2.9.0
+  #     - name: ansible.windows
+  #       version: 1.14.0
+  #     - name: ansible.posix
+  #       version: 1.5.4
+  #   python_packages:
+  #     - six
+  #     - psutil
+  #     - jmespath
+  #   system_packages:
+  #     - iputils [platform:rpm]
+
+  #   # Specfic variables that will OVERWRITE GLOBAL SETTINGS
+  #   package_manager_path: /usr/bin/microdnf
+  #   base_image_full_name:
+  #   custom_pip_conf_file: customs/pip.conf
+  #   custom_repo_file: customs/custom.repo
+  #   custom_ansible_cfg_template:
+  #   execution_environment_template: customs/demo-ee-execution-environment.yml.j2
+  #   containerfile_template: customs/demo-ee-Containerfile.j2
+  #   ah_hostname:        # or via environment variable AH_DEMO-EE_HOSTNAME
+  #   ah_user:            # or via environment variable AH_DEMO-EE_USER
+  #   ah_password:        # or via environment variable AH_DEMO-EE_PASSWORD
+  #   ah_validate_certs:  # or via environment variable AH_DEMO-EE_VALIDATE_CERTS

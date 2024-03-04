@@ -1,0 +1,15 @@
+FROM {{ ee_base_image_full_name }}
+
+ADD configs/ansible.cfg /etc/ansible/ansible.cfg
+
+{% if ee_system_packages is defined %}
+RUN {{ package_manager_path }} install {% for system_package in ee_system_packages %}{{ system_package }} {% endfor %}
+{% endif %}
+
+{% if ee_python_packages is defined %}
+RUN pip3 install {% for python_package in ee_python_packages %}{{ python_package }} {% endfor %}
+{% endif %}
+
+{% if ee_collections is defined %}
+RUN ansible-galaxy collection install {% if not ee_ah_validate_certs | bool %}-c{% endif %} {% for collection in ee_collections %}{{collection.name if collection.name is defined else collection }}{{':' + collection.version if collection.version is defined }} {% endfor %}
+{% endif %}

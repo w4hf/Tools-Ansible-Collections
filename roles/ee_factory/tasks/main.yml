@@ -115,18 +115,18 @@
       changed_when: true
 
     - name: Git pull
-      ansible.builtin.command: "git pull {{ git_remote_name }} HEAD:main"
+      ansible.builtin.command: "git pull {{ git_remote_name }} HEAD:{{ git_branch }}"
       changed_when: true
 
 - name: Build each image
-  ansible.builtin.include_tasks: build_image_using_{{ ee.build_method | default('ansible-builder', true) }}.yml
+  ansible.builtin.include_tasks: decide_and_build.yml
   loop: "{{ EEs }}"
   loop_control:
     loop_var: ee
   when: not __skip_image[ee.name]
 
 - name: Git push
-  ansible.builtin.command: "git push {{ git_remote_name }} HEAD:main -o ci.skip"
+  ansible.builtin.command: "git push {{ git_remote_name }} HEAD:{{ git_branch }} -o ci.skip"
   when: push_to_git_remote_repo and __something_changed
   changed_when: true
 
@@ -142,7 +142,7 @@
 
 - name: Update __actions_performed
   ansible.builtin.set_fact:
-    __actions_performed: "{{ __actions_performed + [ 'Nothing changed. No action was perfomed.' ] }}"
+    __actions_performed: "{{ __actions_performed + ['Nothing changed. No action was perfomed.'] }}"
   when: not __something_changed
 
 - name: Print performed actions if no error occured

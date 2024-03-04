@@ -1,6 +1,7 @@
 - name: Compile image variables - {{ ee.name }}
   ansible.builtin.set_fact:
     ee_name: "{{ ee.name | mandatory(msg='EE name is required.') }}"
+    ee_build_method: "{{ ee.build_method | default('ansible-builder', true) }}"
     ee_version: "{{ ee.version | string | mandatory(msg='EE desired new version is required.') }}"
     ee_full_name: "{{ ee.name + ':' + ee.version | string }}"
     ee_deploy_to: "{{ ee.deploy_to | default(deploy_to, true) | mandatory(msg='EE deploy_to environment list is required.') }}"
@@ -8,16 +9,33 @@
     ee_ah_hostname: "{{ lookup('env', 'EE_' + ee.name | upper + '_AH_HOSTNAME') | default(lookup('env', 'AH_HOSTNAME'), true) | default(ee.ah_hostname, true) | default(ah_hostname, true) | mandatory(msg='Automation Hub hostname not found.') }}"
     ee_ah_user: "{{ lookup('env', 'EE_' + ee.name | upper + '_AH_USER') | default(lookup('env', 'AH_USER'), true) | default(ee.ah_user, true) | default(ah_user, true) | mandatory(msg='Automation Hub user not found.') }}"
     ee_ah_validate_certs: "{{ lookup('env', 'EE_' + ee.name | upper + '_VALIDATE_CERTS') | default(lookup('env', 'AH_VALIDATE_CERTS'), true) | default(ee.ah_validate_certs, true) | default(ah_validate_certs, true) }}"
-    ee_package_manager_path: "{{ ee.package_manager_path | default(package_manager_path) }}"
     ee_base_image_full_name: "{{ ee.base_image_full_name | default(base_image_full_name) | mandatory(msg='EE base image not found.') }}"
     ee_collections: "{{ ee.collections | default(omit) }}"
     ee_python_packages: "{{ ee.python_packages | default(omit) }}"
     ee_system_packages: "{{ ee.system_packages | default(omit) }}"
-    ee_execution_environment_template: "{{ ee.execution_environment_template | default(execution_environment_template, true) }}"
     ee_current_version_file_name: "{{ ee.current_version_file_name | default(current_version_file_name, true) }}"
     ee_custom_pip_conf_file: "{{ ee.custom_pip_conf_file | default(custom_pip_conf_file, true) | default(omit, true) }}"
     ee_custom_repo_file: "{{ ee.custom_repo_file | default(custom_repo_file, true) | default(omit, true) }}"
     ee_ansible_cfg_template: "{{ ee.custom_ansible_cfg_template | default(ansible_cfg_template, true) | default(omit, true) }}"
+
+- name: Compile ansible-builder specific vars
+  ansible.builtin.set_fact:
+    ee_package_manager_path: "{{ ee.package_manager_path | default(package_manager_path) }}"
+    ee_execution_environment_template: "{{ ee.execution_environment_template | default(execution_environment_template, true) }}"
+    ee_containerfile_path: "{{ ee_path }}/context/"
+  when: ee_build_method == 'ansible-builder'
+
+- name: Compile Containerfile specific vars
+  ansible.builtin.set_fact:
+    ee_containerfile_template: "{{ ee.containerfile_template | default(containerfile_template, true) }}"
+    ee_containerfile_path: "{{ ee_path }}/"
+  when: ee_build_method == 'Containerfile'
+
+- name: Compile ansible-builder specific vars
+  ansible.builtin.set_fact:
+    ee_package_manager_path: "{{ ee.package_manager_path | default(package_manager_path) }}"
+    ee_execution_environment_template: "{{ ee.execution_environment_template | default(execution_environment_template, true) }}"
+  when: ee_build_method == 'ansible-builder'
 
 - name: Compile Secure variables - {{ ee.name }}
   ansible.builtin.set_fact:
@@ -89,11 +107,6 @@
     - name: Build and push - {{ ee_full_name }}
       when: __build_and_push and not __do_nothing
       block:
-        - name: Generate execution-environment.yml for {{ ee_full_name }}
-          ansible.builtin.template:
-            src: "{{ ee_execution_environment_template }}"
-            dest: "{{ ee_path }}/execution-environment.yml"
-            mode: '640'
 
         - name: Request AH token
           ansible.builtin.uri:
@@ -133,13 +146,21 @@
             mode: '640'
           when: ee_custom_repo_file is defined
 
+        - name: Generate execution-environment.yml for {{ ee_full_name }}
+          ansible.builtin.template:
+            src: "{{ ee_execution_environment_template }}"
+            dest: "{{ ee_path }}/execution-environment.yml"
+            mode: '640'
+          when: ee_build_method == 'ansible-builder'
+
         - name: Get image ansible-builder parameters for {{ ee_full_name }}
           ansible.builtin.include_vars:
             file: "{{ ee_path }}/execution-environment.yml"
+          when: ee_build_method == 'ansible-builder'
 
-        - name: Make sure the base image is present locally - {{ images.base_image.name }}
+        - name: Make sure the base image is present locally - {{ ee_base_image_full_name }}
           containers.podman.podman_image:
-            name: "{{ images.base_image.name }}"
+            name: "{{ ee_base_image_full_name }}"
             state: present
             username: "{{ ee_ah_user }}"
             password: "{{ ee_ah_password }}"
@@ -149,18 +170,27 @@
           ansible.builtin.file:
             path: "{{ ee_path }}/context"
             state: absent
+          when: ee_build_method == 'ansible-builder'
 
         - name: Create new context for {{ ee_full_name }}
           ansible.builtin.command:
             cmd: ansible-builder create
             chdir: "{{ ee_path }}/"
           changed_when: true
+          when: ee_build_method == 'ansible-builder'
 
-        - name: Build and publish the new image {{ ee_full_name }}
+        - name: Create new Containerfile for {{ ee_full_name }}
+          ansible.builtin.template:
+            src: "{{ ee_containerfile_template }}"
+            dest: "{{ ee_path }}/Containerfile"
+            mode: '640'
+          when: ee_build_method == 'Containerfile'
+
+        - name: Build and publish the new image - {{ ee_full_name }}
           containers.podman.podman_image:
             name: "{{ ee_ah_hostname + '/' + ee_full_name }}"
             state: build
-            path: "{{ ee_path }}/context/"
+            path: "{{ ee_containerfile_path }}"
             force: false
             push: true
             build:
@@ -179,6 +209,14 @@
             dest: "{{ ee_path }}/history/{{ ee_version }}"
             src: "{{ ee_path }}/execution-environment.yml"
             mode: '640'
+          when: ee_build_method == 'ansible-builder'
+
+        - name: Copy new Containerfile to history - {{ ee_full_name }}
+          ansible.builtin.copy:
+            dest: "{{ ee_path }}/history/{{ ee_version }}"
+            src: "{{ ee_path }}/Containerfile"
+            mode: '640'
+          when: ee_build_method == 'Containerfile'
 
         - name: Delete AH token
           ansible.builtin.uri:
@@ -220,6 +258,11 @@
         - name: Cleanup previous execution-environment.yml for {{ ee_full_name }}
           ansible.builtin.file:
             path: "{{ ee_path }}/execution-environment.yml"
+            state: absent
+
+        - name: Cleanup previous Containerfile for {{ ee_full_name }}
+          ansible.builtin.file:
+            path: "{{ ee_path }}/Containerfile"
             state: absent
 
     - name: Push to Git remote repo

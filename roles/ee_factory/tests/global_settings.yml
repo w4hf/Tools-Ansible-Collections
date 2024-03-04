@@ -20,6 +20,7 @@ current_version_file_name: current_version
 execution_environment_template: execution-environment.yml.j2
 package_manager_path: /usr/bin/microdnf
 ansible_cfg_template: ansible.cfg.j2
+containerfile_template: Containerfile.j2
 # custom_pip_conf_file:
 # custom_repo_file:
 
@@ -28,3 +29,4 @@ push_to_git_remote_repo: false
 git_email: change@me.com
 git_username: change-me
 git_repo: github.com/change/me
+git_branch: main
