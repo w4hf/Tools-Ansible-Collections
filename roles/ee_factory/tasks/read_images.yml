@@ -1,0 +1,30 @@
+---
+- name: "Get list of files inside {{ images_path }}"
+  ansible.builtin.find:
+    paths: "{{ images_path }}"
+    file_type: file
+    recurse: true
+  register: __list_files_images
+
+- name: "Read Images definitions"
+  ansible.builtin.include_vars:
+    file: "{{ __images_item.path }}"
+  loop: "{{ __list_files_images.files }}"
+  loop_control:
+    loop_var: __images_item
+  register: __contents_images
+  failed_when: "'VARIABLE IS NOT DEFINED' in __contents_images"
+
+- name: "Populate images list"
+  ansible.builtin.set_fact:
+    __populate_images: "{{ (__populate_images | default([])) + __populate_images_item.ansible_facts.EEs }}"
+  loop: "{{ __contents_images.results }}"
+  loop_control:
+    loop_var: __populate_images_item
+  when: __contents_images.results is defined and __populate_images_item.ansible_facts.EEs is defined
+
+- name: "Set Images Data Structure"
+  ansible.builtin.set_fact:
+    EEs: "{{ __populate_images }}"
+  when: __populate_images is defined
+...

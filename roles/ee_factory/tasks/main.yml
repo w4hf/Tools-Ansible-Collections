@@ -35,6 +35,14 @@
   ansible.builtin.set_fact:
     active_environment: "{{ lookup('env', 'CI_ENVIRONMENT_NAME') | default(target_environment, true) | mandatory(msg='EE target environment is required.') }}"
 
+- name: Read images definitions
+  ansible.builtin.include_tasks:
+    file: read_images.yml
+
+- name: Stop if EEs list is empty
+  ansible.builtin.meta: end_play
+  when: (EEs is not defined) or ((EEs | length) == 0)
+
 - name: Create the images folder
   ansible.builtin.file:
     path: images/

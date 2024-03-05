@@ -12,7 +12,7 @@ stages:
     - 'ansible-playbook build.yml -v'
   rules:
     - changes:
-        - 'images.yml'
+        - 'images/**/*'
       if: $CI_COMMIT_BRANCH == 'main'
 
 Build on DEV:

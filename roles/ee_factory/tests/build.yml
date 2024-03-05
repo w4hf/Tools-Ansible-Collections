@@ -6,7 +6,6 @@
 
   vars_files:
     - global_settings.yml
-    - images.yml
 
   roles:
     - w4hf.tools.ee_factory

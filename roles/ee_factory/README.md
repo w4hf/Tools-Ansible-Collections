@@ -5,7 +5,7 @@ A versions-aware idempotent role for building and publishing Ansible Execution E
 
 This role is designed to be used as the source of truth configuration as code declaration of EE.
 
-A gitlab pipeline is provided with the role. To use it, copy everything from the `tests` folder to the root directory where the calling playbook resides.
+A gitlab pipeline is provided with the role. To use it, copy the `.gitlab-ci.yml` file from the `tests` folder to the root directory where the calling playbook resides.
 
 
 Requirements
@@ -16,7 +16,8 @@ This role requires the collection `containers.podman` and the `ansible-builder` 
 Install the collection with the following comands :
 
 ```shell
-ansible-galaxy collection install -r requirements.yml
+mkdir -p collections/
+ansible-galaxy collection install -r requirements.yml -p collections/
 ```
 
 Getting Started
@@ -24,29 +25,31 @@ Getting Started
 
 The following steps will help you get started by building and publishing an image named `demo-ee`
 
-1. Create a working directory and access it
+1. Create a working directory
 ```shell
 mkdir -p testing/collections/
+mkdir -p testing/roles/w4hf.ee_factory
 cd testing
+git clone https://gitlab.com/w4hf-lab/ee_factory.git roles/w4hf.ee_factory
 ```
 
-2. Download the collection and its dependencies
+2. Download the required collections
 ```shell
-ansible-galaxy collection install w4hf.tools -p collections
+ansible-galaxy collection install -r roles/w4hf.ee_factory/requirements.yml -p collections/
 ```
 
 3. Copy everything inside the tests folder to the root testing folder
 ```shell
-cp collections/ansible_collections/w4hf/tools/roles/ee_factory/tests/* .
+cp roles/w4hf.ee_factory/tests/* .
 ```
 
-4. Edit the ENV.sh file and **insert your environment details**
+4. Edit the ENV.sh file and insert your environment details
 ```shell
 vim ENV.sh
 source ./ENV.sh
 ```
 
-5. **OPTIONAL** Edit `EEs` variable in the `images.yml` file with the new version of the images you want to build or update. For Example :
+5. Create one or more image definition file under the folder `images.d`. Below an example of an image definition file:
 
 ```yaml
 ---
@@ -56,6 +59,8 @@ EEs:
     build_method: ansible-builder
     deploy_to:
       - dev
+      - preprod
+      - prod
     collections:
       - name: ansible.utils
         version: 2.9.0
@@ -178,11 +183,10 @@ Example Playbook
   gather_facts: false
 
   vars_files:
-    - global_settings.yml
     - images.yml
 
   roles:
-    - w4hf.tools.ee_factory
+    - w4hf.ee_factory
 ```
 
 License
