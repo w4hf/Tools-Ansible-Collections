@@ -180,13 +180,14 @@ Example Playbook
 ```yaml
 - name: Build and publish EEs
   hosts: localhost
+  connection: local
   gather_facts: false
 
   vars_files:
-    - images.yml
+    - global_settings.yml
 
   roles:
-    - w4hf.ee_factory
+    - w4hf.tools.ee_factory
 ```
 
 License
